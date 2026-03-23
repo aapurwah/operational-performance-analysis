@@ -1,0 +1,296 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font-sans);}
+.dash{padding:1rem 0;}
+.dash-title{font-size:18px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px;}
+.dash-sub{font-size:13px;color:var(--color-text-secondary);margin-bottom:1.25rem;}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:1.25rem;}
+.kpi-card{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:14px 16px;}
+.kpi-label{font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;}
+.kpi-val{font-size:22px;font-weight:500;color:var(--color-text-primary);}
+.kpi-badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:var(--border-radius-md);margin-top:5px;}
+.badge-red{background:#FCEBEB;color:#A32D2D;}
+.badge-green{background:#EAF3DE;color:#3B6D11;}
+.badge-amber{background:#FAEEDA;color:#854F0B;}
+.charts-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:1.25rem;}
+.chart-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px;}
+.chart-title{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:12px;}
+.chart-wrap{position:relative;}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;font-size:12px;color:var(--color-text-secondary);}
+.legend span{display:flex;align-items:center;gap:4px;}
+.leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+.heatmap-grid{display:grid;gap:4px;}
+.hm-label{font-size:11px;color:var(--color-text-secondary);}
+.filters{display:flex;gap:10px;margin-bottom:1rem;align-items:center;flex-wrap:wrap;}
+.filter-label{font-size:12px;color:var(--color-text-secondary);}
+select{font-size:12px;padding:4px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-primary);}
+.full-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px;margin-bottom:1.25rem;}
+</style>
+
+<div class="dash">
+  <div class="dash-title">Operational Performance Dashboard</div>
+  <div class="dash-sub">NovaBridge Logistics — Q1 2024 &nbsp;|&nbsp; 35 orders &nbsp;|&nbsp; Jan–Mar 2024</div>
+
+  <div class="filters">
+    <span class="filter-label">Filter by:</span>
+    <select id="f-dept" onchange="updateAll()">
+      <option value="All">All Departments</option>
+      <option>Operations</option><option>Finance</option><option>Quality Assurance</option>
+      <option>Logistics</option><option>Customer Service</option><option>Procurement</option>
+    </select>
+    <select id="f-priority" onchange="updateAll()">
+      <option value="All">All Priorities</option>
+      <option>High</option><option>Medium</option><option>Low</option>
+    </select>
+    <select id="f-region" onchange="updateAll()">
+      <option value="All">All Regions</option>
+      <option>North</option><option>South</option><option>East</option><option>West</option><option>Central</option>
+    </select>
+  </div>
+
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Average processing time by process type (hrs)</div>
+      <div class="chart-wrap" style="height:220px;"><canvas id="chartProc"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Throughput &amp; revenue by region</div>
+      <div class="legend" id="leg-region"></div>
+      <div class="chart-wrap" style="height:200px;"><canvas id="chartRegion"></canvas></div>
+    </div>
+  </div>
+
+  <div class="full-card">
+    <div class="chart-title">SLA breach heatmap — department × priority</div>
+    <div id="heatmap"></div>
+  </div>
+
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Order status breakdown</div>
+      <div class="legend" id="leg-status"></div>
+      <div class="chart-wrap" style="height:180px;"><canvas id="chartStatus"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Error rate &amp; rework by process type (%)</div>
+      <div class="chart-wrap" style="height:200px;"><canvas id="chartErr"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const RAW = [
+  ["ORD-1001","Order Fulfillment","Operations","Ravi Sharma","High","2024-01-03","2024-01-09","2024-01-12","Delayed","Yes",312,18,"Yes",22.3,4.1,"North","Enterprise",4200,7140,],
+  ["ORD-1002","Invoice Processing","Finance","Priya Mehta","Low","2024-01-05","2024-01-12","2024-01-13","Completed","No",145,5,"Yes",8.7,1.2,"South","SMB",1100,1870,],
+  ["ORD-1003","Quality Check","Quality Assurance","Anjali Singh","Medium","2024-01-08","2024-01-14","2024-01-18","Delayed","Yes",88,9,"Yes",15.2,6.8,"East","Retail",900,1440,],
+  ["ORD-1004","Shipment Dispatch","Logistics","Deepak Joshi","High","2024-01-10","2024-01-15","2024-01-14","Completed","No",420,0,"No",6.1,0.5,"West","Government",3800,6460,],
+  ["ORD-1005","Returns Handling","Customer Service","Neha Gupta","Low","2024-01-12","2024-01-19","2024-01-22","Delayed","Yes",67,7,"Yes",18.5,5.3,"Central","SMB",700,1050,],
+  ["ORD-1006","Vendor Onboarding","Procurement","Arjun Patel","Medium","2024-01-15","2024-01-22","2024-01-21","Completed","No",30,1,"Yes",12.0,2.0,"North","Enterprise",2200,3740,],
+  ["ORD-1007","Order Fulfillment","Operations","Sunita Rao","High","2024-01-18","2024-01-24","2024-01-28","Delayed","Yes",280,22,"Yes",30.1,7.2,"South","Retail",5100,8670,],
+  ["ORD-1008","Invoice Processing","Finance","Vikram Das","Medium","2024-01-20","2024-01-27","2024-01-26","Completed","No",195,3,"Yes",9.5,1.0,"East","SMB",1400,2380,],
+  ["ORD-1009","Quality Check","Quality Assurance","Ravi Sharma","Low","2024-01-22","2024-01-28","2024-01-29","Completed","No",120,4,"Yes",11.0,2.5,"West","Retail",800,1280,],
+  ["ORD-1010","Shipment Dispatch","Logistics","Priya Mehta","High","2024-01-25","2024-01-30","2024-02-03","Delayed","Yes",380,0,"No",7.8,0.8,"Central","Government",4500,7650,],
+  ["ORD-1011","Returns Handling","Customer Service","Anjali Singh","Medium","2024-01-28","2024-02-04","2024-02-04","Completed","No",55,2,"Yes",14.2,3.1,"North","Enterprise",600,900,],
+  ["ORD-1012","Vendor Onboarding","Procurement","Deepak Joshi","High","2024-02-01","2024-02-08","2024-02-11","Delayed","Yes",42,3,"Yes",16.7,4.4,"South","SMB",2800,4760,],
+  ["ORD-1013","Order Fulfillment","Operations","Neha Gupta","Low","2024-02-03","2024-02-10","2024-02-09","Completed","No",210,0,"No",10.3,1.6,"East","Retail",3200,5440,],
+  ["ORD-1014","Invoice Processing","Finance","Arjun Patel","Medium","2024-02-06","2024-02-12","2024-02-15","Delayed","Yes",160,8,"Yes",13.4,2.8,"West","Government",1300,2210,],
+  ["ORD-1015","Quality Check","Quality Assurance","Sunita Rao","High","2024-02-08","2024-02-15","2024-02-14","Completed","No",95,0,"No",8.0,0.9,"Central","Enterprise",1000,1700,],
+  ["ORD-1016","Shipment Dispatch","Logistics","Vikram Das","Low","2024-02-10","2024-02-16","2024-02-19","Delayed","Yes",450,0,"No",9.2,1.1,"North","SMB",5500,9350,],
+  ["ORD-1017","Returns Handling","Customer Service","Ravi Sharma","Medium","2024-02-12","2024-02-19","2024-02-18","Completed","No",73,5,"Yes",20.1,6.0,"South","Retail",750,1125,],
+  ["ORD-1018","Vendor Onboarding","Procurement","Priya Mehta","High","2024-02-14","2024-02-21","2024-02-25","Delayed","Yes",38,2,"Yes",18.3,5.7,"East","Government",3100,5270,],
+  ["ORD-1019","Order Fulfillment","Operations","Anjali Singh","Low","2024-02-16","2024-02-23","2024-02-22","Completed","No",175,0,"No",7.5,0.7,"West","Enterprise",2700,4590,],
+  ["ORD-1020","Invoice Processing","Finance","Deepak Joshi","High","2024-02-18","2024-02-25","2024-02-28","Delayed","Yes",130,11,"Yes",17.6,3.9,"Central","SMB",1200,2040,],
+  ["ORD-1021","Quality Check","Quality Assurance","Neha Gupta","Medium","2024-02-20","2024-02-27","2024-02-26","Completed","No",110,2,"Yes",10.5,1.8,"North","Retail",850,1445,],
+  ["ORD-1022","Shipment Dispatch","Logistics","Arjun Patel","High","2024-02-22","2024-02-28","2024-03-02","Delayed","Yes",490,0,"No",8.4,0.6,"South","Government",6000,10200,],
+  ["ORD-1023","Returns Handling","Customer Service","Sunita Rao","Low","2024-02-24","2024-03-02","2024-03-03","Completed","No",40,1,"Yes",12.8,2.4,"East","Enterprise",550,825,],
+  ["ORD-1024","Vendor Onboarding","Procurement","Vikram Das","Medium","2024-02-26","2024-03-04","2024-03-07","Delayed","Yes",25,0,"No",14.0,3.5,"West","SMB",1900,3230,],
+  ["ORD-1025","Order Fulfillment","Operations","Ravi Sharma","High","2024-02-28","2024-03-06","2024-03-05","Completed","No",340,0,"No",11.2,1.3,"Central","Retail",4800,8160,],
+  ["ORD-1026","Invoice Processing","Finance","Priya Mehta","Low","2024-03-01","2024-03-08","2024-03-10","Delayed","Yes",105,6,"Yes",16.9,4.6,"North","Government",980,1666,],
+  ["ORD-1027","Quality Check","Quality Assurance","Anjali Singh","High","2024-03-03","2024-03-10","2024-03-09","Completed","No",140,3,"Yes",9.7,1.4,"South","Enterprise",1100,1870,],
+  ["ORD-1028","Shipment Dispatch","Logistics","Deepak Joshi","Medium","2024-03-05","2024-03-11","2024-03-14","Delayed","Yes",410,0,"No",10.0,0.9,"East","SMB",5200,8840,],
+  ["ORD-1029","Returns Handling","Customer Service","Neha Gupta","Low","2024-03-07","2024-03-14","2024-03-13","Completed","No",60,3,"Yes",15.5,3.8,"West","Retail",620,930,],
+  ["ORD-1030","Vendor Onboarding","Procurement","Arjun Patel","High","2024-03-09","2024-03-16","2024-03-20","Delayed","Yes",50,1,"Yes",19.4,5.1,"Central","Government",2500,4250,],
+  ["ORD-1031","Order Fulfillment","Operations","Sunita Rao","Medium","2024-03-11","2024-03-18","2024-03-17","Completed","No",260,0,"No",8.9,1.0,"North","Enterprise",3900,6630,],
+  ["ORD-1032","Invoice Processing","Finance","Vikram Das","High","2024-03-13","2024-03-20","2024-03-23","Delayed","Yes",185,14,"Yes",21.3,5.5,"South","SMB",1600,2720,],
+  ["ORD-1033","Quality Check","Quality Assurance","Ravi Sharma","Low","2024-03-15","2024-03-21","2024-03-21","Completed","No",75,0,"No",7.2,0.8,"East","Retail",700,1190,],
+  ["ORD-1034","Shipment Dispatch","Logistics","Priya Mehta","Medium","2024-03-17","2024-03-23","2024-03-22","Completed","No",320,0,"No",5.8,0.4,"West","Government",4100,6970,],
+  ["ORD-1035","Returns Handling","Customer Service","Anjali Singh","High","2024-03-19","2024-03-26","2024-03-30","Delayed","Yes",82,8,"Yes",24.7,7.9,"Central","Enterprise",900,1350,],
+];
+
+const COLS={id:0,proc:1,dept:2,agent:3,pri:4,status:8,sla:9,units:10,errors:11,rework:12,ptime:13,itime:14,region:15,seg:16,cost:17,rev:18};
+
+let charts={};
+function destroyAll(){Object.values(charts).forEach(c=>c.destroy());charts={};}
+
+function filtered(){
+  const d=document.getElementById('f-dept').value;
+  const p=document.getElementById('f-priority').value;
+  const r=document.getElementById('f-region').value;
+  return RAW.filter(row=>
+    (d==='All'||row[COLS.dept]===d)&&
+    (p==='All'||row[COLS.pri]===p)&&
+    (r==='All'||row[COLS.region]===r)
+  );
+}
+
+function avg(arr){return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;}
+function sum(arr){return arr.reduce((a,b)=>a+b,0);}
+
+function updateAll(){
+  const data=filtered();
+  destroyAll();
+  renderKPIs(data);
+  renderProcessing(data);
+  renderRegion(data);
+  renderHeatmap(data);
+  renderStatus(data);
+  renderErrors(data);
+}
+
+function renderKPIs(data){
+  const total=data.length;
+  const completed=data.filter(r=>r[COLS.status]==='Completed').length;
+  const breaches=data.filter(r=>r[COLS.sla]==='Yes').length;
+  const totalUnits=sum(data.map(r=>+r[COLS.units]));
+  const totalRev=sum(data.map(r=>+r[COLS.rev]));
+  const totalCost=sum(data.map(r=>+r[COLS.cost]));
+  const margin=totalRev>0?((totalRev-totalCost)/totalRev*100):0;
+  const avgProc=avg(data.map(r=>+r[COLS.ptime]));
+  const slaRate=total>0?breaches/total*100:0;
+  const compRate=total>0?completed/total*100:0;
+
+  const kpis=[
+    {label:"Completion rate",val:compRate.toFixed(1)+"%",badge:compRate>=80?"badge-green":"badge-red",badgeText:compRate>=80?"On target":"Below target"},
+    {label:"SLA breach rate",val:slaRate.toFixed(1)+"%",badge:slaRate>10?"badge-red":"badge-amber",badgeText:slaRate>10?"High risk":"Monitor"},
+    {label:"Avg processing time",val:avgProc.toFixed(1)+" hrs",badge:avgProc<20?"badge-green":"badge-red",badgeText:avgProc<20?"Within target":"Exceeds target"},
+    {label:"Gross margin",val:margin.toFixed(1)+"%",badge:"badge-green",badgeText:"$"+Math.round((totalRev-totalCost)/1000)+"K profit"},
+  ];
+  const grid=document.getElementById('kpi-grid');
+  grid.innerHTML=kpis.map(k=>`
+    <div class="kpi-card">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-val">${k.val}</div>
+      <div class="kpi-badge ${k.badge}">${k.badgeText}</div>
+    </div>`).join('');
+}
+
+function renderProcessing(data){
+  const procs=["Order Fulfillment","Invoice Processing","Quality Check","Shipment Dispatch","Returns Handling","Vendor Onboarding"];
+  const vals=procs.map(p=>{
+    const rows=data.filter(r=>r[COLS.proc]===p);
+    return rows.length?+avg(rows.map(r=>+r[COLS.ptime])).toFixed(1):0;
+  });
+  const colors=['#378ADD','#1D9E75','#E24B4A','#EF9F27','#7F77DD','#D4537E'];
+  charts.proc=new Chart(document.getElementById('chartProc'),{
+    type:'bar',
+    data:{labels:procs.map(p=>p.replace(' ','\n')),datasets:[{data:vals,backgroundColor:colors,borderRadius:4,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{ticks:{font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'},title:{display:true,text:'hrs',font:{size:10}}}}}
+  });
+}
+
+function renderRegion(data){
+  const regions=["North","South","East","West","Central"];
+  const unitVals=regions.map(r=>sum(data.filter(d=>d[COLS.region]===r).map(d=>+d[COLS.units])));
+  const revVals=regions.map(r=>Math.round(sum(data.filter(d=>d[COLS.region]===r).map(d=>+d[COLS.rev]))/1000));
+  const leg=document.getElementById('leg-region');
+  leg.innerHTML=`<span><span class="leg-dot" style="background:#378ADD"></span>Units processed</span><span><span class="leg-dot" style="background:#1D9E75"></span>Revenue ($K)</span>`;
+  charts.region=new Chart(document.getElementById('chartRegion'),{
+    type:'bar',
+    data:{labels:regions,datasets:[
+      {label:'Units',data:unitVals,backgroundColor:'#378ADD',borderRadius:3},
+      {label:'Revenue ($K)',data:revVals,backgroundColor:'#1D9E75',borderRadius:3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{ticks:{font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}}}}
+  });
+}
+
+function renderHeatmap(data){
+  const depts=["Operations","Finance","Quality Assurance","Logistics","Customer Service","Procurement"];
+  const pris=["High","Medium","Low"];
+  const maxVal=Math.max(...depts.flatMap(d=>pris.map(p=>{
+    const rows=data.filter(r=>r[COLS.dept]===d&&r[COLS.pri]===p);
+    return rows.length?rows.filter(r=>r[COLS.sla]==='Yes').length/rows.length*100:0;
+  })));
+
+  function getColor(val){
+    if(val===0) return '#EAF3DE';
+    if(val<25) return '#FAC775';
+    if(val<50) return '#EF9F27';
+    if(val<75) return '#E24B4A';
+    return '#A32D2D';
+  }
+  function getTextColor(val){
+    if(val===0) return '#3B6D11';
+    if(val<25) return '#633806';
+    return '#FFFFFF';
+  }
+
+  const container=document.getElementById('heatmap');
+  const cellW=Math.floor(100/(depts.length+1));
+  let html=`<div style="display:grid;grid-template-columns:auto ${depts.map(()=>'1fr').join(' ')};gap:3px;font-size:11px;">`;
+  html+=`<div></div>${depts.map(d=>`<div style="text-align:center;color:var(--color-text-secondary);padding:2px 0;font-weight:500;">${d.replace(' ','\u00A0')}</div>`).join('')}`;
+  pris.forEach(p=>{
+    html+=`<div style="color:var(--color-text-secondary);padding:4px 8px 4px 0;display:flex;align-items:center;">${p}</div>`;
+    depts.forEach(d=>{
+      const rows=data.filter(r=>r[COLS.dept]===d&&r[COLS.pri]===p);
+      const rate=rows.length?rows.filter(r=>r[COLS.sla]==='Yes').length/rows.length*100:0;
+      const bg=getColor(rate);
+      const tc=getTextColor(rate);
+      html+=`<div style="background:${bg};color:${tc};border-radius:4px;padding:6px 4px;text-align:center;font-weight:500;">${rate>0?rate.toFixed(0)+'%':'—'}</div>`;
+    });
+  });
+  html+=`</div>`;
+  html+=`<div style="display:flex;gap:12px;margin-top:10px;font-size:11px;color:var(--color-text-secondary);">`;
+  [['#EAF3DE','#3B6D11','0%'],['#FAC775','#633806','1–24%'],['#EF9F27','#fff','25–49%'],['#E24B4A','#fff','50–74%'],['#A32D2D','#fff','75%+']].forEach(([bg,tc,label])=>{
+    html+=`<span style="display:flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;border-radius:2px;background:${bg};"></span>${label}</span>`;
+  });
+  html+=`</div>`;
+  container.innerHTML=html;
+}
+
+function renderStatus(data){
+  const statuses=['Completed','Delayed','In Progress','Cancelled'];
+  const vals=statuses.map(s=>data.filter(r=>r[COLS.status]===s).length);
+  const colors=['#1D9E75','#E24B4A','#378ADD','#888780'];
+  const leg=document.getElementById('leg-status');
+  leg.innerHTML=statuses.map((s,i)=>`<span><span class="leg-dot" style="background:${colors[i]}"></span>${s} ${vals[i]}</span>`).join('');
+  charts.status=new Chart(document.getElementById('chartStatus'),{
+    type:'doughnut',
+    data:{labels:statuses,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:4}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:false}}}
+  });
+}
+
+function renderErrors(data){
+  const procs=["Order Fulfillment","Invoice Processing","Quality Check","Shipment Dispatch","Returns Handling","Vendor Onboarding"];
+  const errRates=procs.map(p=>{
+    const rows=data.filter(r=>r[COLS.proc]===p);
+    if(!rows.length) return 0;
+    const totalUnits=sum(rows.map(r=>+r[COLS.units]));
+    const totalErr=sum(rows.map(r=>+r[COLS.errors]));
+    return totalUnits>0?+(totalErr/totalUnits*100).toFixed(1):0;
+  });
+  const reworkRates=procs.map(p=>{
+    const rows=data.filter(r=>r[COLS.proc]===p);
+    return rows.length?+(rows.filter(r=>r[COLS.rework]==='Yes').length/rows.length*100).toFixed(1):0;
+  });
+  charts.err=new Chart(document.getElementById('chartErr'),{
+    type:'bar',
+    data:{labels:procs.map(p=>p.length>14?p.substring(0,13)+'…':p),datasets:[
+      {label:'Error rate %',data:errRates,backgroundColor:'#E24B4A',borderRadius:3},
+      {label:'Rework rate %',data:reworkRates,backgroundColor:'#EF9F27',borderRadius:3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:true,labels:{font:{size:10},boxWidth:10,boxHeight:10}}},
+      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'},title:{display:true,text:'%',font:{size:10}}}}}
+  });
+}
+
+updateAll();
+</script>
